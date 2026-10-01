@@ -2,6 +2,8 @@
 
 A web app for a college library, built with **Python and Flask**. Students, faculty and librarians create an account with their **username, email and password** (one account per email), and each role gets its own dashboard. The app also **recommends books** from each student's borrowing history and shows **simple reading insights**.
 
+**Live demo: https://student-library-e9dr.onrender.com** (free hosting, so the first visit after a quiet spell can take about a minute to wake up)
+
 ![Sign-in page](docs/screenshots/login.png)
 
 ## What each role can do
