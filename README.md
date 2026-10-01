@@ -1,57 +1,198 @@
 # Student Library Management System
 
-A web app for a college library, built with **Python and Flask**. Students, faculty and librarians create an account with their **username, email and password** (one account per email), and each role gets its own dashboard. The app also **recommends books** from each student's borrowing history and shows **simple reading insights**.
+A full-stack web app for a college library. **Students** borrow and return books and get personalised recommendations, **faculty** see what students are reading, and **librarians** manage the catalogue.
 
-**Live demo: https://student-library-e9dr.onrender.com** (free hosting, so the first visit after a quiet spell can take about a minute to wake up)
+[![Live demo](https://img.shields.io/badge/live%20demo-online-1E5B47)](https://student-library-e9dr.onrender.com)
+[![Tests](https://github.com/shivam-pandyacoder24/Student-library-management-system/actions/workflows/tests.yml/badge.svg)](https://github.com/shivam-pandyacoder24/Student-library-management-system/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/flask-3-000000?logo=flask&logoColor=white)
+![SQLite](https://img.shields.io/badge/sqlite-database-003B57?logo=sqlite&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-![Sign-in page](docs/screenshots/login.png)
+**Live demo: https://student-library-e9dr.onrender.com**
 
-## What each role can do
+> **Try it in 10 seconds:** open the live demo and click **Student**, **Faculty** or **Librarian** under "Just looking around?". No sign-up needed.
+> It runs on free hosting, so the first visit after a quiet spell takes about a minute to wake up, and demo data resets when the server restarts.
 
-| Role | What they get |
+![Demo walkthrough](docs/demo.gif)
+
+## Contents
+
+- [Features](#features)
+- [Engineering highlights](#engineering-highlights)
+- [How it works](#how-it-works)
+- [Screenshots](#screenshots)
+- [Run it on your computer](#run-it-on-your-computer)
+- [Deploy it](#deploy-it)
+- [What I'd build next](#what-id-build-next)
+
+## Features
+
+**Students**
+- Search the catalogue by title, author, ISBN or category, and see how many copies are on the shelf
+- Borrow (issue) and return books, with due dates and late fines
+- Get **book recommendations**, each with the reason it was picked
+- See **reading insights**: categories read, books per month, on-time return rate
+- Get **suggestions**: due-soon and overdue alerts, and nudges to try new categories
+
+**Faculty**
+- A **student × category grid** showing which students read which kinds of books
+- A category filter that lists every student reading, say, Artificial Intelligence
+- Each student's reading profile and history, plus the most borrowed books and most active readers
+
+**Librarians**
+- **Add books**, **delete books**, and change the number of copies
+- See overdue loans with fines, everything on loan, and recent activity
+- **Stock suggestions**: which categories need more copies, which titles are never borrowed
+
+**Accounts**
+- Sign up with name, username, email, password and role. **One account per email.**
+- Sign in with username or email, plus password
+- Faculty and librarian sign-ups need a staff access code, so students can't make themselves librarians
+
+## Engineering highlights
+
+- **Recommendation engine** built from scratch: content-based scoring (category and author) combined with collaborative filtering ("students who read X also borrowed Y", using cosine similarity), recency weighting and a diversity rule. [How it scores books](#how-recommendations-are-picked).
+- **No double-booking:** borrowing runs inside a locked database transaction (`BEGIN IMMEDIATE`), so two students can't take the last copy at the same moment.
+- **Security:**
+  - Passwords are hashed with PBKDF2-SHA256.
+  - Every form carries a CSRF token.
+  - Accounts pause for 15 minutes after 5 wrong passwords.
+  - Each page checks the user's role.
+  - The session is renewed at sign-in.
+  - Redirects only go to pages on this site.
+- **Data that can't drift:** available copies are calculated from open loans, not stored as a counter. Deleted books are hidden rather than erased, so history and insights stay correct.
+- **Plain SQL** with Python's built-in `sqlite3` (no ORM), including joins, grouping and a self-join for "also borrowed".
+- **33 automated tests** covering accounts, passwords, roles, borrowing rules and recommendations. They run on every push with GitHub Actions.
+- **No JavaScript framework:** server-rendered pages with hand-written, responsive CSS that works on phones.
+
+## How it works
+
+### Architecture
+
+```mermaid
+flowchart LR
+    B[Browser] -->|HTTP| F[Flask app<br/>wsgi.py]
+    F --> A[auth.py<br/>sign up and sign in]
+    F --> S[student.py]
+    F --> FA[faculty.py]
+    F --> L[librarian.py]
+    S --> SV[services.py<br/>borrowing rules and fines]
+    S --> R[recommender.py]
+    S --> I[insights.py]
+    FA --> I
+    L --> SV
+    L --> I
+    A & SV & R & I --> DB[(SQLite database)]
+```
+
+Each role has its own set of pages (a Flask *blueprint*). The pages call three small modules for the logic: `services.py` (borrowing rules), `recommender.py` and `insights.py`. All data lives in one SQLite file.
+
+### What happens when a student borrows a book
+
+```mermaid
+sequenceDiagram
+    actor Student
+    participant App as student.py
+    participant Rules as services.issue_book
+    participant DB as SQLite
+    Student->>App: Click "Borrow" (form with CSRF token)
+    App->>Rules: issue_book(student, book)
+    Rules->>DB: BEGIN IMMEDIATE (lock)
+    Rules->>DB: Copies left? Already has it? Holding 3? Anything overdue?
+    alt every check passes
+        Rules->>DB: Add loan due in 14 days, COMMIT
+        App-->>Student: "You borrowed it. Return it by ..."
+    else a check fails
+        Rules->>DB: ROLLBACK
+        App-->>Student: The reason, e.g. "All copies are out"
+    end
+```
+
+### Database
+
+```mermaid
+erDiagram
+    USERS ||--o{ LOANS : borrows
+    BOOKS ||--o{ LOANS : "is lent in"
+    USERS {
+        int id PK
+        text username UK
+        text email UK
+        text full_name
+        text role "student, faculty or librarian"
+        text password_hash
+    }
+    BOOKS {
+        int id PK
+        text title
+        text author
+        text category
+        int total_copies
+        int is_active "0 means deleted"
+    }
+    LOANS {
+        int id PK
+        int user_id FK
+        int book_id FK
+        text issued_at
+        text due_at
+        text returned_at "empty while on loan"
+    }
+```
+
+A fourth table, `login_failures`, records recent wrong-password attempts for the 15-minute pause.
+
+### How recommendations are picked
+
+For every book a student hasn't read, the app adds up four signals:
+
+```
+score = 0.60 × category match     how much of their reading is in this category (recent books count more)
+      + 0.25 × same author        they've read this author before
+      + 0.35 × also borrowed      students who read the same books also borrowed this one
+      + 0.10 × popularity         borrowed often in the last 180 days
+```
+
+The top books become the picks. Three extra rules keep the list useful:
+
+- At most two picks come from the same category.
+- One pick is always from a category the student hasn't tried yet ("Something different").
+- A brand-new student gets the most popular books.
+
+Each card shows the strongest reason, for example *"Readers of “Clean Code” also borrowed this"*.
+
+### Where to find things in the code
+
+| To understand… | Look at |
 |---|---|
-| **Student** | Browse and search the catalogue, **issue (borrow)** and **return** books, see due dates and fines, get **personal recommendations**, reading insights and suggestions, and a full borrowing history. |
-| **Faculty** | See **which students are reading which types of books**: a student × category grid, a "who reads this category" filter, each student's reading profile, most borrowed books and most active readers. |
-| **Librarian** | **Add new books**, **delete books**, change the number of copies, see overdue loans with fines, everything on loan, recent activity, and stock suggestions (which categories need more copies, which titles are never borrowed). |
+| Sign-up, sign-in and the wrong-password pause | [`library/auth.py`](library/auth.py) |
+| Borrowing rules, due dates and fines | [`library/services.py`](library/services.py) |
+| How recommendations are scored | [`library/recommender.py`](library/recommender.py) |
+| Insights and suggestions | [`library/insights.py`](library/insights.py) |
+| The pages for each role | [`student.py`](library/student.py), [`faculty.py`](library/faculty.py), [`librarian.py`](library/librarian.py) and [`templates/`](library/templates) |
+| Database tables | [`library/db.py`](library/db.py) |
+| Settings | [`library/config.py`](library/config.py) |
+| Demo books, accounts and history | [`library/seed.py`](library/seed.py) |
+| Tests | [`tests/test_app.py`](tests/test_app.py) |
 
-### Accounts and sign-in
+## Screenshots
 
-- **Sign up** with full name, username, email, password and role. Each email can only have **one account**, and each username is unique.
-- **Sign in** with your **username or email** plus your password.
-- Passwords need at least 8 characters with a mix of letters and numbers or symbols. They are stored **hashed** (PBKDF2-SHA256), never as plain text.
-- After 5 wrong passwords, the account is paused for 15 minutes to stop guessing.
-- Faculty and librarian sign-ups need a **staff access code**, so students can't make themselves librarians.
-- All forms are protected against CSRF.
-
-| Create an account | Student home |
+| Sign in | Create an account |
 |---|---|
-| ![Sign-up page](docs/screenshots/signup.png) | ![Student home](docs/screenshots/student-home.png) |
+| ![Sign-in page](docs/screenshots/login.png) | ![Sign-up page](docs/screenshots/signup.png) |
+
+| Student home | Recommendations and insights |
+|---|---|
+| ![Student home](docs/screenshots/student-home.png) | ![Recommendations](docs/screenshots/student-for-you.png) |
 
 | Faculty: who reads what | Librarian overview |
 |---|---|
 | ![Faculty view](docs/screenshots/faculty-reading.png) | ![Librarian view](docs/screenshots/librarian-overview.png) |
 
-More screenshots are in [`docs/screenshots`](docs/screenshots).
-
-## How the recommendations work
-
-For each book the student hasn't read, the app adds up four simple signals (see [`library/recommender.py`](library/recommender.py)):
-
-- **Category match**: how much of the student's reading is in that category. Recent books count more (a 90-day half-life).
-- **Same author**: the student has read this author before.
-- **Also borrowed**: students who borrowed the same books also borrowed this one (cosine similarity, and only links backed by at least two students).
-- **Popularity**: how often it was borrowed in the last 180 days.
-
-Each card explains *why* it was picked ("Matches your interest in Artificial Intelligence", "Readers of “Clean Code” also borrowed this"). At most two picks share a category, and one pick always comes from a category the student hasn't tried yet. New students get the most popular books.
-
-**Insights** (see [`library/insights.py`](library/insights.py)): books borrowed, categories explored, on-time return rate, average days kept, reading by category, books per month, plus suggestions such as due-soon and overdue warnings with fines, "most of your reading is X, try Y", and late-return reminders.
-
-## Library rules (configurable)
-
-- Up to **3 books** at a time, for **14 days** each.
-- A student with an overdue book can't borrow another until it's returned.
-- Late returns are fined **₹5 per day**.
-- A book can't be deleted while copies are on loan. Deleted books are hidden, not erased, so history and insights stay correct.
+| Librarian: manage books | On a phone |
+|---|---|
+| ![Manage books](docs/screenshots/librarian-books.png) | <img src="docs/screenshots/mobile-student.png" width="260" alt="Student home on a phone"> |
 
 ## Run it on your computer
 
@@ -64,125 +205,47 @@ pip install -r requirements.txt
 python wsgi.py
 ```
 
-On Windows, use `py` instead of `python` if `python` isn't recognised.
+Open http://127.0.0.1:5000 and keep that terminal open while you use it. On Windows, type `py` instead of `python` if `python` isn't recognised.
 
-Open http://127.0.0.1:5000 **while that window stays open** (closing it stops the site). The database (`instance/library.db`) is created automatically with 50 books and demo accounts. Use the **Student / Faculty / Librarian** demo buttons on the sign-in page to look around, or create your own account.
+The database is created automatically with 50 books, demo accounts and borrowing history.
 
-Run the tests (33 of them, covering accounts, passwords, roles, loans and recommendations):
+Run the tests:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-## Put it online (free)
+## Deploy it
 
-### Option 1: PythonAnywhere (recommended: your data is kept)
-
-1. Create a free **Beginner** account at [pythonanywhere.com](https://www.pythonanywhere.com/). Your site will be `https://YOUR-USERNAME.pythonanywhere.com`.
-2. Open **Consoles → Bash** and run, one line at a time:
-   ```bash
-   git clone https://github.com/shivam-pandyacoder24/Student-library-management-system.git
-   cd Student-library-management-system
-   python3.11 -m venv ~/venv-library
-   source ~/venv-library/bin/activate
-   pip install -r requirements.txt
-   python3 -c "import secrets; print(secrets.token_hex(32))"
-   ```
-3. Copy the long text the last command printed. Then create your settings file (replace the two values first):
-   ```bash
-   cat > .env <<'EOF'
-   SECRET_KEY=paste-the-long-text-here
-   STAFF_ACCESS_CODE=choose-a-code-for-faculty-and-librarians
-   COOKIE_SECURE=1
-   EOF
-   ```
-4. Go to **Web → Add a new web app → Next → Manual configuration → Python 3.11 → Next**.
-5. Under **Virtualenv**, enter `/home/YOUR-USERNAME/venv-library`.
-6. Click the **WSGI configuration file** link, delete everything in it, paste this (with your username), and **Save**:
-   ```python
-   import os, sys
-   path = "/home/YOUR-USERNAME/Student-library-management-system"
-   if path not in sys.path:
-       sys.path.insert(0, path)
-   os.chdir(path)
-   from wsgi import app as application
-   ```
-7. Back on the **Web** tab, turn on **Force HTTPS** and click **Reload**. Your site is live.
-
-**Keep it running:** free sites switch off after a month unless extended, so log in about once a month and click **"Run until 1 month from today"** on the Web tab.
-
-**Update after changes on GitHub:** in a Bash console run `cd Student-library-management-system && git pull`, then click **Reload**.
-
-**If you see "Something went wrong":** open the **Error log** link on the Web tab. The usual causes are a wrong username in the WSGI file, a missing virtualenv path, or forgetting to click Reload.
-
-### Option 2: Render (one click)
+| Option | Best for | Keeps new accounts? |
+|---|---|---|
+| **Render** (one click, sign in with GitHub) | A permanent public link | No, data resets on restart |
+| **PythonAnywhere** | A real library that keeps its data | Yes |
+| **Cloudflare tunnel** from your laptop | A quick live demo, no account | While your laptop is on |
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/shivam-pandyacoder24/Student-library-management-system)
 
-Render reads [`render.yaml`](render.yaml) and generates `SECRET_KEY` and `STAFF_ACCESS_CODE` for you (find the code under the service's **Environment** tab). Note that Render's free plan doesn't keep files between restarts, so accounts and loans reset whenever the service restarts (the demo data reloads automatically). Use PythonAnywhere if you need data to stay.
+Step-by-step instructions for all three, plus settings and resetting passwords, are in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-### Option 3: Share from your own laptop (no account at all)
+## What I'd build next
 
-Good for a live demo. The link works only while your laptop is on and both windows stay open, and it changes every time.
+- Email reminders two days before a book is due
+- A waiting list when all copies of a book are out
+- Book cover images from the Open Library API
+- PostgreSQL, so data persists on any host
+- CSV import for adding many books at once
+- A small JSON API for a mobile app
 
-1. Start the site as in "Run it on your computer" and leave that window open.
-2. In a second Command Prompt, install Cloudflare's tunnel tool once: `winget install --id Cloudflare.cloudflared`, then close and reopen the window.
-3. Run `cloudflared tunnel --url http://localhost:5000`.
-4. Share the `https://…trycloudflare.com` link it prints.
+## Built with
 
-## Forgot password
+Python, Flask, Jinja2, SQLite, Werkzeug (password hashing), HTML and CSS, GitHub Actions, Render.
 
-The librarian (or whoever runs the server) can set a new password from a console in the project folder:
+This project was built with the help of [Claude](https://claude.ai), Anthropic's AI assistant, used as a pair programmer. Commits it co-wrote are marked in the history.
 
-```bash
-flask --app wsgi set-password USERNAME-OR-EMAIL
-```
+## Author
 
-It asks for the new password twice. On PythonAnywhere, run `source ~/venv-library/bin/activate` first.
+[@shivam-pandyacoder24](https://github.com/shivam-pandyacoder24)
 
-## Settings
+## License
 
-All settings are environment variables (or lines in `.env`). See [`.env.example`](.env.example).
-
-| Variable | What it does | Default |
-|---|---|---|
-| `SECRET_KEY` | Signs session cookies. **Set a long random value.** | dev value |
-| `STAFF_ACCESS_CODE` | Code needed to sign up as faculty or librarian | `staff123` |
-| `LIBRARY_NAME` | Name shown in the header | Campus Library |
-| `SEED_DEMO_DATA` | Load 50 books, 10 demo accounts and history into an empty database | `1` |
-| `ENABLE_DEMO_LOGIN` | Show the one-click demo buttons. **Set to `0` for real use**, since anyone could open the librarian demo. | `1` |
-| `LOAN_DAYS`, `MAX_ACTIVE_LOANS`, `FINE_PER_DAY` | Library rules | `14`, `3`, `5` |
-| `DATABASE_PATH` | Where the SQLite file lives | `instance/library.db` |
-| `COOKIE_SECURE` | Send cookies only over HTTPS | `0` |
-
-Reload the demo data at any time with `flask --app wsgi reset-demo` (this wipes the database).
-
-## Project structure
-
-```
-├── wsgi.py                  entry point (gunicorn, PythonAnywhere, python wsgi.py)
-├── library/
-│   ├── __init__.py          app factory, template filters, error pages, CLI commands
-│   ├── config.py            settings from environment variables
-│   ├── db.py                SQLite schema and helpers (built-in sqlite3, no ORM)
-│   ├── auth.py              sign up, sign in, password checks, demo logins
-│   ├── services.py          issue/return rules, availability, fines
-│   ├── recommender.py       book recommendations
-│   ├── insights.py          student, faculty and librarian insights
-│   ├── student.py           student pages
-│   ├── faculty.py           faculty pages
-│   ├── librarian.py         librarian pages
-│   ├── seed.py              demo catalogue, accounts and borrowing history
-│   ├── catalog.py           categories and their colours
-│   ├── templates/           Jinja2 HTML templates
-│   └── static/              CSS and icon
-├── tests/test_app.py        automated tests
-├── render.yaml              Render deployment
-└── .env.example             settings template
-```
-
-**Database tables:** `users` (username, email, name, role, password hash), `books` (title, author, category, copies), `loans` (who borrowed what, when it's due, when it came back), `login_failures` (recent wrong-password attempts, for the 15-minute pause).
-
-## Tech stack
-
-Python 3, Flask, Jinja2, SQLite, Werkzeug password hashing, plain HTML and CSS (no JavaScript framework), gunicorn for Render.
+[MIT](LICENSE)
