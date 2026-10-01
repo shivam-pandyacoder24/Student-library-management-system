@@ -119,6 +119,15 @@ python -m unittest discover -s tests -v
 
 Render reads [`render.yaml`](render.yaml) and generates `SECRET_KEY` and `STAFF_ACCESS_CODE` for you (find the code under the service's **Environment** tab). Note that Render's free plan doesn't keep files between restarts, so accounts and loans reset whenever the service restarts (the demo data reloads automatically). Use PythonAnywhere if you need data to stay.
 
+### Option 3: Share from your own laptop (no account at all)
+
+Good for a live demo. The link works only while your laptop is on and both windows stay open, and it changes every time.
+
+1. Start the site as in "Run it on your computer" and leave that window open.
+2. In a second Command Prompt, install Cloudflare's tunnel tool once: `winget install --id Cloudflare.cloudflared`, then close and reopen the window.
+3. Run `cloudflared tunnel --url http://localhost:5000`.
+4. Share the `https://…trycloudflare.com` link it prints.
+
 ## Forgot password
 
 The librarian (or whoever runs the server) can set a new password from a console in the project folder:
