@@ -1,0 +1,121 @@
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro logo(size=26) %}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 32 32" aria-hidden="true">
+  <rect x="3" y="6" width="7" height="22" rx="1.5" fill="#1E5B47"/>
+  <rect x="11.5" y="3" width="7" height="25" rx="1.5" fill="#24406B"/>
+  <rect x="20" y="8" width="7" height="20" rx="1.5" fill="#8A6418" transform="rotate(8 23.5 28)"/>
+  <rect x="3" y="10" width="7" height="1.6" fill="#F2D9A6" opacity=".7"/>
+  <rect x="11.5" y="7" width="7" height="1.6" fill="#F2D9A6" opacity=".7"/>
+</svg>
+{% endmacro %}
+
+{% macro flashes() %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes" role="status">
+      {% for kind, message in messages %}
+        <div class="flash flash-{{ kind if kind in ['success', 'error', 'warn', 'info'] else 'info' }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+{% endmacro %}
+
+{% macro chip(category, href=None) -%}
+  {% if href %}<a class="chip" style="--c: {{ category|color }}" href="{{ href }}">{{ category }}</a>
+  {% else %}<span class="chip" style="--c: {{ category|color }}">{{ category }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro icon(kind) %}
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {% if kind == 'alert' %}<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/>
+  {% elif kind == 'warn' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+  {% elif kind == 'idea' %}<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2V16h5v-.2c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z"/>
+  {% elif kind == 'good' %}<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.7 2.7L16 9.8"/>
+  {% else %}<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/>{% endif %}
+</svg>
+{% endmacro %}
+
+{% macro tips(items) %}
+  <ul class="tips">
+    {% for kind, text in items %}
+      <li class="tip tip-{{ kind }}">{{ icon(kind) }}<span>{{ text }}</span></li>
+    {% endfor %}
+  </ul>
+{% endmacro %}
+
+{% macro bars(rows, unit='') %}
+  <div class="bars">
+    {% for r in rows %}
+      <div class="bar-row">
+        <span>{{ r.label }}</span>
+        <div class="bar-track" role="img" aria-label="{{ r.label }}: {{ r.n }}{{ unit }}"><div class="bar-fill" style="--w: {{ r.width }}%; --c: {{ r.color }}"></div></div>
+        <span class="bar-n">{{ r.n }}{% if r.pct is defined %} <span class="muted small">({{ r.pct }}%)</span>{% endif %}</span>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro months(rows, noun='books') %}
+  <div class="months" role="img" aria-label="{% for m in rows %}{{ m.label }}: {{ m.n }} {{ noun }}{% if not loop.last %}, {% endif %}{% endfor %}">
+    {% for m in rows %}
+      <div class="month"><b>{{ m.n }}</b><div class="month-col"><span style="--h: {{ m.height }}%"></span></div><span>{{ m.label }}</span></div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro stamp(loan) %}
+  {% set late = days_overdue(loan) %}
+  {% set left = days_left(loan) %}
+  {% if late %}
+    <div class="stamp is-late"><small>Overdue</small>{{ loan.due_at|day }}</div>
+  {% elif left <= 3 %}
+    <div class="stamp is-soon"><small>{% if left == 0 %}Due today{% elif left == 1 %}Due tomorrow{% else %}Due in {{ left }} days{% endif %}</small>{{ loan.due_at|day }}</div>
+  {% else %}
+    <div class="stamp"><small>Due</small>{{ loan.due_at|day }}</div>
+  {% endif %}
+{% endmacro %}
+
+{% macro slip(loan, can_return=False, next=None) %}
+  <article class="slip" style="--c: {{ loan.category|color }}">
+    <div>
+      <div class="slip-title">{{ loan.title }}</div>
+      <div class="slip-meta">{{ loan.author }}, borrowed {{ loan.issued_at|day }}{% if fine_for(loan) %}. <strong style="color: var(--alert)">Fine so far: ₹{{ fine_for(loan) }}</strong>{% endif %}</div>
+    </div>
+    <div class="slip-side">
+      {{ stamp(loan) }}
+      {% if can_return %}
+      <form method="post" action="{{ url_for('student.return_', loan_id=loan.id) }}">
+        {{ csrf() }}<input type="hidden" name="next" value="{{ next or request.path }}">
+        <button class="btn btn-quiet btn-small" type="submit">Return</button>
+      </form>
+      {% endif %}
+    </div>
+  </article>
+{% endmacro %}
+
+{% macro borrow_button(book, holding, label='Borrow') %}
+  {% if book.id in holding %}
+    <span class="status">You have this</span>
+  {% elif book.available <= 0 %}
+    <button class="btn btn-small" type="button" disabled>All copies out</button>
+  {% else %}
+    <form method="post" action="{{ url_for('student.issue', book_id=book.id) }}">
+      {{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
+      <button class="btn btn-small" type="submit">{{ label }}</button>
+    </form>
+  {% endif %}
+{% endmacro %}
+
+{% macro cover_card(rec, holding) %}
+  {% set b = rec.book %}
+  <article class="cover-card">
+    <div class="cover" style="--c: {{ b.category|color }}">
+      <div class="cover-title">{{ b.title }}</div>
+      <div class="cover-author">{{ b.author }}</div>
+    </div>
+    <p class="reason {% if rec.kind == 'explore' %}reason-explore{% endif %}">{{ rec.reason }}</p>
+    {{ borrow_button(b, holding) }}
+  </article>
+{% endmacro %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ greeting }}, {{ current_user.full_name.split()[0] if not current_user.full_name.startswith('Dr') else current_user.full_name }}</h1>
+    <p>What students have been reading over the last {{ o.days }} days.</p>
+  </div>
+  <a class="btn" href="{{ url_for('faculty.students') }}">See reading by student</a>
+</div>
+
+<div class="ledger">
+  <div><b>{{ o.students }}</b><span>students registered</span></div>
+  <div><b>{{ o.active_readers }}</b><span>borrowed in the last 30 days</span></div>
+  <div><b>{{ o.loans_period }}</b><span>books borrowed in {{ o.days }} days</span></div>
+  <div><b>{{ o.top_category or '–' }}</b><span>most-read category</span></div>
+</div>
+
+<div class="grid-halves section">
+  <section class="panel">
+    <h2>Reading by category</h2>
+    {% if o.categories %}{{ ui.bars(o.categories) }}{% else %}<p class="muted">No borrowing yet.</p>{% endif %}
+    <p class="small" style="margin-top: 16px">Pick a category on the <a href="{{ url_for('faculty.students') }}">student reading</a> page to see who reads it.</p>
+  </section>
+  <section class="panel">
+    <h2>Books borrowed per month</h2>
+    {{ ui.months(o.monthly) }}
+  </section>
+</div>
+
+<div class="grid-halves section">
+  <section>
+    <div class="section-head"><h2>Most borrowed books</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Book</th><th>Category</th><th class="num">Loans</th></tr></thead>
+      <tbody>{% for b in o.top_books %}
+        <tr><td><span class="title-cell">{{ b.title }}</span><br><span class="muted small">{{ b.author }}</span></td><td>{{ ui.chip(b.category) }}</td><td class="num">{{ b.n }}</td></tr>
+      {% else %}<tr><td colspan="3" class="muted">No loans yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section>
+    <div class="section-head"><h2>Most active readers</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th><th class="num">Books</th></tr></thead>
+      <tbody>{% for r in o.top_readers %}
+        <tr><td><a class="student-link" href="{{ url_for('faculty.student_detail', user_id=r.id) }}">{{ r.name }}</a></td><td class="num">{{ r.n }}</td></tr>
+      {% else %}<tr><td colspan="2" class="muted">No loans yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+</div>
+{% endblock %}

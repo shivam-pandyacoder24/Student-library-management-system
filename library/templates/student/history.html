@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}History{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Borrowing history</h1>
+    <p>Every book you've borrowed, newest first. Late returns are fined ₹{{ cfg.FINE_PER_DAY }} a day.</p>
+  </div>
+</div>
+{% if loans %}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Book</th><th>Category</th><th>Borrowed</th><th>Due</th><th>Returned</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for l in loans %}
+      {% set late = days_overdue(l) %}
+      <tr>
+        <td><span class="title-cell">{{ l.title }}</span><br><span class="muted small">{{ l.author }}</span></td>
+        <td>{{ ui.chip(l.category) }}</td>
+        <td>{{ l.issued_at|date }}</td>
+        <td>{{ l.due_at|date }}</td>
+        <td>{{ l.returned_at|date if l.returned_at else '–' }}</td>
+        <td>
+          {% if not l.returned_at and late %}<span class="badge badge-late">{{ late }} day{{ 's' if late != 1 }} overdue, ₹{{ fine_for(l) }}</span>
+          {% elif not l.returned_at %}<span class="badge badge-out">With you</span>
+          {% elif late %}<span class="badge badge-late">{{ late }} day{{ 's' if late != 1 }} late, ₹{{ fine_for(l) }}</span>
+          {% else %}<span class="badge badge-ok">On time</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty">No books yet. <a href="{{ url_for('student.catalog') }}">Borrow your first one</a>.</div>
+{% endif %}
+{% endblock %}

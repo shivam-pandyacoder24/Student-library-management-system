@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Home{% endblock %} – {{ library_name }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Literata:opsz,wght@7..72,500;7..72,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+{% import "macros.html" as ui with context %}
+{% block body %}
+  {% if current_user %}
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('auth.index') }}">{{ ui.logo() }}{{ library_name }}</a>
+      <nav class="nav" aria-label="Main">
+        {% set links = {
+          'student': [('student.dashboard', 'Home'), ('student.catalog', 'Catalogue'), ('student.for_you', 'For you'), ('student.history', 'History')],
+          'faculty': [('faculty.dashboard', 'Overview'), ('faculty.students', 'Student reading')],
+          'librarian': [('librarian.dashboard', 'Overview'), ('librarian.books', 'Manage books')],
+        }[current_user.role] %}
+        {% for endpoint, label in links %}
+          <a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint or (endpoint == 'faculty.students' and request.endpoint == 'faculty.student_detail') %}aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </nav>
+      <div class="who">
+        <div class="who-name">{{ current_user.full_name }}<span class="who-role">{{ current_user.role }}{% if current_user.is_demo %} (demo){% endif %}</span></div>
+        <span class="avatar" aria-hidden="true">{{ current_user.full_name|initials }}</span>
+        <form method="post" action="{{ url_for('auth.logout') }}">
+          {{ ui.csrf() }}
+          <button class="btn btn-quiet btn-small" type="submit">Sign out</button>
+        </form>
+      </div>
+    </div>
+  </header>
+  {% endif %}
+  <main class="page">
+    {{ ui.flashes() }}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">{{ library_name }}, a student library management system built with Flask.</footer>
+{% endblock %}
+</body>
+</html>

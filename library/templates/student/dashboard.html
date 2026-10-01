@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ greeting }}, {{ current_user.full_name.split()[0] }}</h1>
+    <p>
+      {% if loans %}You have {{ loans|length }} book{{ 's' if loans|length != 1 }} out. The next one is due {{ loans[0].due_at|day }}.
+      {% else %}You don't have any books out right now.{% endif %}
+    </p>
+  </div>
+  <a class="btn" href="{{ url_for('student.catalog') }}">Browse the catalogue</a>
+</div>
+
+<div class="grid-2">
+  <section>
+    <div class="section-head"><h2>On your desk</h2><span class="count">{{ loans|length }} of {{ cfg.MAX_ACTIVE_LOANS }} books</span></div>
+    {% if loans %}
+      <div class="slips">{% for loan in loans %}{{ ui.slip(loan, can_return=True) }}{% endfor %}</div>
+    {% else %}
+      <div class="empty">Nothing borrowed yet. <a href="{{ url_for('student.catalog') }}">Find a book in the catalogue</a> or pick one from the suggestions below.</div>
+    {% endif %}
+  </section>
+  <section>
+    <div class="section-head"><h2>Suggestions</h2></div>
+    {% if tips %}{{ ui.tips(tips) }}{% else %}<div class="empty">You're all caught up.</div>{% endif %}
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Picked for you</h2>
+    <a href="{{ url_for('student.for_you') }}">All picks and your reading insights</a>
+  </div>
+  <div class="covers">
+    {% set holding = loans|map(attribute='book_id')|list %}
+    {% for rec in recs %}{{ ui.cover_card(rec, holding) }}{% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="ledger" aria-label="Your reading so far">
+    <div><b>{{ stats.total }}</b><span>books borrowed</span></div>
+    <div><b>{{ stats.explored }}/{{ stats.category_total }}</b><span>categories explored</span></div>
+    <div><b>{{ stats.on_time_rate ~ '%' if stats.on_time_rate is not none else '–' }}</b><span>returned on time</span></div>
+    <div><b>{{ stats.favorite or '–' }}</b><span>most-read category</span></div>
+  </div>
+</section>
+{% endblock %}

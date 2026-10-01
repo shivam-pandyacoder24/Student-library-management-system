@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Catalogue{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Catalogue</h1>
+    <p>Borrow up to {{ cfg.MAX_ACTIVE_LOANS }} books for {{ cfg.LOAN_DAYS }} days each.
+      {% if slots_left > 0 %}You can borrow {{ slots_left }} more.{% else %}Return a book to borrow another.{% endif %}</p>
+  </div>
+</div>
+
+<form class="filters" method="get" role="search">
+  <label class="visually-hidden" for="q">Search by title, author or ISBN</label>
+  <input id="q" type="search" name="q" value="{{ q }}" placeholder="Search by title, author or ISBN">
+  <label class="visually-hidden" for="category">Category</label>
+  <select id="category" name="category">
+    <option value="">All categories</option>
+    {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="available" value="1" {% if available %}checked{% endif %}> On the shelf</label>
+  <button class="btn btn-quiet" type="submit">Search</button>
+</form>
+
+<div class="cat-pills" aria-label="Quick category filter">
+  {% for c in categories %}
+    <a class="chip" style="--c: {{ c|color }}" href="{{ url_for('student.catalog', category='' if c == category else c, q=q or None, available='1' if available else None) }}" {% if c == category %}aria-current="true"{% endif %}>{{ c }}</a>
+  {% endfor %}
+</div>
+
+<p class="count" style="margin-bottom: 10px">{{ books|length }} title{{ 's' if books|length != 1 }}{% if q or category or available %} match{{ 'es' if books|length == 1 }} your search{% endif %}</p>
+{% if books %}
+<ul class="books">
+  {% for b in books %}
+  <li class="book" style="--c: {{ b.category|color }}">
+    <div>
+      <div class="book-title">{{ b.title }}</div>
+      <div class="book-meta"><span>{{ b.author }}{% if b.published_year %}, {{ b.published_year }}{% endif %}</span>{{ ui.chip(b.category) }}</div>
+    </div>
+    <div class="avail {% if b.available <= 0 %}is-out{% endif %}">
+      {% if b.available > 0 %}<b>{{ b.available }}</b> of {{ b.total_copies }} on the shelf{% else %}All {{ b.total_copies }} out{% endif %}
+    </div>
+    <div class="book-action">{{ ui.borrow_button(b, holding) }}</div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty">No books match that search. Try fewer words, or <a href="{{ url_for('student.catalog') }}">clear the filters</a>.</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}{{ student.full_name }}{% endblock %}
+{% block content %}
+<p style="margin-bottom: 16px"><a href="{{ url_for('faculty.students') }}">Back to student reading</a></p>
+<div class="page-head">
+  <div class="profile-head">
+    <span class="avatar" aria-hidden="true">{{ student.full_name|initials }}</span>
+    <div>
+      <h1>{{ student.full_name }}</h1>
+      <p>@{{ student.username }}{% if student.department %}, {{ student.department }}{% endif %}</p>
+    </div>
+  </div>
+</div>
+
+<div class="ledger">
+  <div><b>{{ stats.total }}</b><span>books borrowed</span></div>
+  <div><b>{{ stats.favorite or '–' }}</b><span>most-read category</span></div>
+  <div><b>{{ stats.explored }}/{{ stats.category_total }}</b><span>categories explored</span></div>
+  <div><b>{{ stats.on_time_rate ~ '%' if stats.on_time_rate is not none else '–' }}</b><span>returned on time</span></div>
+</div>
+
+<div class="grid-halves section">
+  <section class="panel">
+    <h2>Reading by category</h2>
+    {% if stats.categories %}{{ ui.bars(stats.categories) }}{% else %}<p class="muted">Hasn't borrowed anything yet.</p>{% endif %}
+  </section>
+  <section>
+    <div class="section-head"><h2>Reading now</h2></div>
+    {% if current %}<div class="slips">{% for l in current %}{{ ui.slip(l) }}{% endfor %}</div>
+    {% else %}<div class="empty">No books out right now.</div>{% endif %}
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Borrowing history</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Book</th><th>Category</th><th>Borrowed</th><th>Returned</th></tr></thead>
+    <tbody>{% for l in history %}
+      <tr><td><span class="title-cell">{{ l.title }}</span><br><span class="muted small">{{ l.author }}</span></td>
+        <td>{{ ui.chip(l.category) }}</td><td>{{ l.issued_at|date }}</td>
+        <td>{% if l.returned_at %}{{ l.returned_at|date }}{% else %}<span class="badge badge-out">Reading now</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No books yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

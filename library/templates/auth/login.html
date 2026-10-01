@@ -1,0 +1,37 @@
+{% extends "auth/layout.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Sign in{% endblock %}
+{% block auth_content %}
+<nav class="tabs" aria-label="Account">
+  <a href="{{ url_for('auth.login') }}" aria-current="page">Sign in</a>
+  <a href="{{ url_for('auth.signup') }}">Create account</a>
+</nav>
+<h2>Sign in</h2>
+<p>Enter your username and email. We'll send a 6-digit code to that inbox to confirm it's you.</p>
+<form method="post" novalidate>
+  {{ ui.csrf() }}
+  <div class="field">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username" value="{{ form.username }}" required autofocus>
+  </div>
+  <div class="field">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" inputmode="email" value="{{ form.email }}" required>
+  </div>
+  <button class="btn btn-block" type="submit">Email me a code</button>
+</form>
+<div class="after-form"><span>New here? <a href="{{ url_for('auth.signup') }}">Create an account</a></span></div>
+
+{% if cfg.ENABLE_DEMO_LOGIN %}
+<section class="demo" aria-labelledby="demo-h">
+  <p id="demo-h">Just looking around? Open a demo account with sample data, no email needed.</p>
+  <div class="demo-buttons">
+    {% for role, label in [('student', 'Student'), ('faculty', 'Faculty'), ('librarian', 'Librarian')] %}
+    <form method="post" action="{{ url_for('auth.demo_login', role=role) }}">
+      {{ ui.csrf() }}<button class="btn btn-quiet" type="submit">{{ label }}</button>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

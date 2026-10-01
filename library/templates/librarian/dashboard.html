@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ greeting }}, {{ current_user.full_name.split()[0] }}</h1>
+    <p>{{ o.out }} cop{{ 'ies are' if o.out != 1 else 'y is' }} on loan{% if o.overdue %}, and {{ o.overdue }} {{ 'are' if o.overdue != 1 else 'is' }} overdue{% endif %}.</p>
+  </div>
+  <a class="btn" href="{{ url_for('librarian.books') }}#add">Add a book</a>
+</div>
+
+<div class="ledger">
+  <div><b>{{ o.titles }}</b><span>titles in the catalogue</span></div>
+  <div><b>{{ o.copies }}</b><span>copies in total</span></div>
+  <div><b>{{ o.out }}</b><span>copies on loan</span></div>
+  <div class="{% if o.overdue %}is-alert{% endif %}"><b>{{ o.overdue }}</b><span>overdue</span></div>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Suggestions</h2></div>
+  {% if stock.tips %}{{ ui.tips(stock.tips) }}{% else %}<div class="empty">Stock looks balanced.</div>{% endif %}
+</section>
+
+<div class="grid-halves section">
+  <section>
+    <div class="section-head"><h2>Overdue</h2><span class="count">{{ overdue|length }}</span></div>
+    {% if overdue %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Book</th><th>Student</th><th class="num">Late</th><th class="num">Fine</th></tr></thead>
+      <tbody>{% for l in overdue %}
+        <tr><td class="title-cell">{{ l.title }}</td><td>{{ l.full_name }}<br><span class="muted small">{{ l.email }}</span></td>
+          <td class="num">{{ l.late }} day{{ 's' if l.late != 1 }}</td><td class="num">₹{{ l.fine }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">Nothing overdue.</div>{% endif %}
+  </section>
+  <section class="panel">
+    <h2>Demand against stock</h2>
+    <p class="muted small" style="margin: -6px 0 14px">Loans in the last {{ stock.days }} days for each copy on the shelves.</p>
+    <div class="table-wrap" style="border: 0">
+      <table>
+        <thead><tr><th>Category</th><th class="num">Copies</th><th class="num">Loans</th><th class="num">Per copy</th></tr></thead>
+        <tbody>{% for r in stock.rows %}
+          <tr><td>{{ ui.chip(r.category) }}</td><td class="num">{{ r.copies }}</td><td class="num">{{ r.loans }}</td>
+            <td class="num"><b>{{ r.ratio if r.ratio is not none else '–' }}</b></td></tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="grid-halves section">
+  <section>
+    <div class="section-head"><h2>On loan now</h2><span class="count">{{ out|length }}</span></div>
+    {% if out %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Book</th><th>Student</th><th>Due</th></tr></thead>
+      <tbody>{% for l in out %}
+        {% set late = days_overdue(l) %}
+        <tr><td class="title-cell">{{ l.title }}</td><td>{{ l.full_name }}</td>
+          <td>{{ l.due_at|day }}{% if late %} <span class="badge badge-late">late</span>{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">No books are out.</div>{% endif %}
+  </section>
+  <section>
+    <div class="section-head"><h2>Recent activity</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>What happened</th><th>When</th></tr></thead>
+      <tbody>{% for l in recent %}
+        <tr><td>{{ l.full_name }} {{ 'returned' if l.returned_at else 'borrowed' }} <span class="title-cell">{{ l.title }}</span></td>
+          <td class="muted small" style="white-space: nowrap">{{ (l.returned_at or l.issued_at)|when }}</td></tr>
+      {% else %}<tr><td colspan="2" class="muted">Nothing yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+</div>
+{% endblock %}

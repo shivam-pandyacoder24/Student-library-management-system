@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block body %}
+<div class="auth">
+  <section class="auth-shelf" aria-label="About the library">
+    <div>
+      <a class="brand" href="{{ url_for('auth.login') }}" style="color:#fff">{{ ui.logo(30) }}<span class="visually-hidden">{{ library_name }}</span></a>
+      <h1 style="margin-top: 28px">{{ library_name }}</h1>
+      <p>Borrow and return books, see what students are reading, and get picks based on your own shelf.</p>
+    </div>
+    <div class="shelf" aria-hidden="true">
+      {% for b in shelf %}
+        <div class="spine" title="{{ b.title }}"
+             style="--c: {{ b.category|color }}; --h: {{ 170 + (b.id * 37) % 95 }}px; --w: {{ 30 + (b.title|length * 3) % 20 }}px">{{ b.title }}</div>
+      {% endfor %}
+    </div>
+  </section>
+  <main class="auth-main">
+    <div class="auth-card">
+      {{ ui.flashes() }}
+      {% block auth_content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}

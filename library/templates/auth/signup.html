@@ -1,0 +1,48 @@
+{% extends "auth/layout.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Create account{% endblock %}
+{% block auth_content %}
+<nav class="tabs" aria-label="Account">
+  <a href="{{ url_for('auth.login') }}">Sign in</a>
+  <a href="{{ url_for('auth.signup') }}" aria-current="page">Create account</a>
+</nav>
+<h2>Create your account</h2>
+<p>Pick your role, then confirm your email with a 6-digit code.</p>
+<form method="post" novalidate>
+  {{ ui.csrf() }}
+  <div class="field">
+    <label for="full_name">Full name</label>
+    <input id="full_name" name="full_name" type="text" autocomplete="name" value="{{ form.full_name }}" required autofocus>
+  </div>
+  <div class="field">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username" value="{{ form.username }}" required
+           pattern="[A-Za-z0-9._]{3,30}" aria-describedby="username-hint">
+    <span class="hint" id="username-hint">3–30 characters: letters, numbers, dots and underscores.</span>
+  </div>
+  <div class="field">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" inputmode="email" value="{{ form.email }}" required>
+  </div>
+  <fieldset class="roles">
+    <legend>I am a</legend>
+    {% for value, label, note in [('student', 'Student', 'Borrow and return books'), ('faculty', 'Faculty', 'See what students read'), ('librarian', 'Librarian', 'Add and remove books')] %}
+    <label class="role-opt">
+      <input type="radio" name="role" value="{{ value }}" {% if form.role == value %}checked{% endif %}>
+      <span><b>{{ label }}</b><small>{{ note }}</small></span>
+    </label>
+    {% endfor %}
+  </fieldset>
+  <div class="field staff-only">
+    <label for="staff_code">Staff access code</label>
+    <input id="staff_code" name="staff_code" type="text" autocomplete="off" aria-describedby="staff-hint">
+    <span class="hint" id="staff-hint">Faculty and librarian accounts need the code from the library office.</span>
+  </div>
+  <div class="field">
+    <label for="department">Department or programme <span class="muted">(optional)</span></label>
+    <input id="department" name="department" type="text" value="{{ form.department }}" placeholder="e.g. B.Tech AI">
+  </div>
+  <button class="btn btn-block" type="submit">Email me a code</button>
+</form>
+<div class="after-form"><span>Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></span></div>
+{% endblock %}

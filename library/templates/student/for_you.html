@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}For you{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>For you</h1>
+    <p>Picks based on the categories and authors you read, and on what students with similar shelves borrowed.</p>
+  </div>
+</div>
+
+<section>
+  <div class="covers">{% for rec in recs %}{{ ui.cover_card(rec, holding) }}{% endfor %}</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Your reading</h2></div>
+  <div class="ledger">
+    <div><b>{{ stats.total }}</b><span>books borrowed</span></div>
+    <div><b>{{ stats.authors }}</b><span>different authors</span></div>
+    <div><b>{{ stats.on_time_rate ~ '%' if stats.on_time_rate is not none else '–' }}</b><span>returned on time</span></div>
+    <div><b>{{ stats.avg_days if stats.avg_days is not none else '–' }}</b><span>days kept on average</span></div>
+  </div>
+</section>
+
+<div class="grid-halves section">
+  <section class="panel">
+    <h2>What you read</h2>
+    {% if stats.categories %}{{ ui.bars(stats.categories) }}
+    <p class="muted small" style="margin-top: 14px">You've explored {{ stats.explored }} of {{ stats.category_total }} categories.</p>
+    {% else %}<p class="muted">Borrow a book and your categories will show up here.</p>{% endif %}
+  </section>
+  <section class="panel">
+    <h2>Books borrowed per month</h2>
+    {{ ui.months(stats.monthly) }}
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Suggestions</h2></div>
+  {% if tips %}{{ ui.tips(tips) }}{% else %}<div class="empty">You're all caught up.</div>{% endif %}
+</section>
+{% endblock %}

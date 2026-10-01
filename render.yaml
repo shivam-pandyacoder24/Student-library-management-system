@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: student-library
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 1 --threads 4 --bind 0.0.0.0:$PORT
+    healthCheckPath: /login
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.11"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STAFF_ACCESS_CODE
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: LIBRARY_NAME
+        value: Campus Library
+      # Render's free plan blocks SMTP, so use Brevo's email API (free, 300 emails/day).
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM_EMAIL
+        sync: false

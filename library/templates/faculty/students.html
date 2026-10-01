@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Student reading{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Student reading</h1>
+    <p>Which students read which kinds of books. Each cell counts the books a student has borrowed in that category.</p>
+  </div>
+</div>
+
+<section>
+  <div class="section-head"><h2>Who reads a category</h2></div>
+  <div class="cat-pills">
+    {% for c in categories %}
+      <a class="chip" style="--c: {{ c|color }}" href="{{ url_for('faculty.students', category='' if c == category else c) }}" {% if c == category %}aria-current="true"{% endif %}>{{ c }}</a>
+    {% endfor %}
+  </div>
+  {% if readers is not none %}
+    {% if readers %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th><th>{{ category }} books read</th><th>Reading now</th><th>Last borrowed</th></tr></thead>
+      <tbody>{% for r in readers %}
+        <tr>
+          <td><a class="student-link" href="{{ url_for('faculty.student_detail', user_id=r.id) }}">{{ r.name }}</a><br><span class="muted small">@{{ r.username }}</span></td>
+          <td>{{ r.titles|join(', ') }}</td>
+          <td>{{ r.reading_now|join(', ') if r.reading_now else '–' }}</td>
+          <td>{{ r.last|date }}</td>
+        </tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}
+    <div class="empty">No student has borrowed a {{ category }} book yet.</div>
+    {% endif %}
+  {% else %}
+    <p class="muted">Choose a category to list its readers.</p>
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Every student at a glance</h2><span class="count">{{ matrix.rows|length }} students</span></div>
+  {% if matrix.rows %}
+  <div class="table-wrap">
+    <table class="matrix">
+      <thead><tr>
+        <th>Student</th>
+        {% for c in matrix.categories %}<th class="cat"><span style="--c: {{ c|color }}">{{ c }}</span></th>{% endfor %}
+        <th class="num">Total</th>
+        <th>Reading now</th>
+      </tr></thead>
+      <tbody>
+      {% for row in matrix.rows %}
+        <tr>
+          <td><a class="student-link" href="{{ url_for('faculty.student_detail', user_id=row.user.id) }}">{{ row.user.full_name }}</a>
+            <br><span class="muted small">{{ row.user.department or '@' ~ row.user.username }}</span></td>
+          {% for c in matrix.categories %}
+            {% set n = row.counts.get(c, 0) %}
+            {% set a = (12 + 78 * n / matrix.peak)|round|int %}
+            <td class="cell {% if not n %}zero{% endif %}"><span style="--c: {{ c|color }}; --a: {{ a }}%; {% if a > 50 %}--fg: #fff{% endif %}" title="{{ row.user.full_name }}: {{ n }} {{ c }}">{{ n if n else '·' }}</span></td>
+          {% endfor %}
+          <td class="num"><b>{{ row.total }}</b></td>
+          <td>
+            {% if row.current %}<div class="reading-now">{% for l in row.current %}<div>{{ l.title }}</div>{% endfor %}</div>
+            {% else %}<span class="muted">–</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No students have signed up yet.</div>
+  {% endif %}
+</section>
+{% endblock %}

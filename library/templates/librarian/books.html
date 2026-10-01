@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Manage books{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Manage books</h1>
+    <p>Add new titles, change how many copies you hold, or delete a title. A title can only be deleted when no copies are on loan.</p>
+  </div>
+</div>
+
+<div class="grid-2" style="grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr)">
+  <section>
+    <form class="filters" method="get" role="search" style="grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto">
+      <label class="visually-hidden" for="q">Search</label>
+      <input id="q" type="search" name="q" value="{{ q }}" placeholder="Search by title, author or ISBN">
+      <label class="visually-hidden" for="cat">Category</label>
+      <select id="cat" name="category">
+        <option value="">All categories</option>
+        {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-quiet" type="submit">Search</button>
+    </form>
+    <p class="count" style="margin-bottom: 10px">{{ books|length }} title{{ 's' if books|length != 1 }}</p>
+    {% set here = request.full_path if request.query_string else request.path %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Book</th><th>On shelf</th><th>Copies</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody>
+        {% for b in books %}
+          <tr>
+            <td><span class="title-cell">{{ b.title }}</span><br>
+              <span class="muted small">{{ b.author }}{% if b.published_year %}, {{ b.published_year }}{% endif %}</span>
+              <div style="margin-top: 6px">{{ ui.chip(b.category) }}</div></td>
+            <td style="white-space: nowrap">{{ b.available }} of {{ b.total_copies }}{% if b.on_loan %}<br><span class="muted small">{{ b.on_loan }} on loan</span>{% endif %}</td>
+            <td>
+              <div class="copies">
+                <form method="post" action="{{ url_for('librarian.change_copies', book_id=b.id) }}">
+                  {{ ui.csrf() }}<input type="hidden" name="next" value="{{ here }}"><input type="hidden" name="action" value="remove">
+                  <button class="icon-btn" type="submit" aria-label="Remove a copy of {{ b.title }}">−</button>
+                </form>
+                <b style="min-width: 22px; text-align: center">{{ b.total_copies }}</b>
+                <form method="post" action="{{ url_for('librarian.change_copies', book_id=b.id) }}">
+                  {{ ui.csrf() }}<input type="hidden" name="next" value="{{ here }}"><input type="hidden" name="action" value="add">
+                  <button class="icon-btn" type="submit" aria-label="Add a copy of {{ b.title }}">+</button>
+                </form>
+              </div>
+            </td>
+            <td class="num">
+              <form method="post" action="{{ url_for('librarian.delete_book', book_id=b.id) }}"
+                    onsubmit="return confirm('Delete “{{ b.title|replace("'", "’") }}” from the catalogue?');">
+                {{ ui.csrf() }}<input type="hidden" name="next" value="{{ here }}">
+                <button class="btn btn-danger btn-small" type="submit" {% if b.on_loan %}disabled title="Copies are on loan"{% endif %}>Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="muted">No titles match. <a href="{{ url_for('librarian.books') }}">Clear the search</a>.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <aside>
+    <section class="panel add-book" id="add">
+      <h2>Add a book</h2>
+      <form method="post" action="{{ url_for('librarian.add_book') }}" novalidate>
+        {{ ui.csrf() }}
+        <div class="field"><label for="title">Title</label><input id="title" name="title" type="text" value="{{ form.title }}" required maxlength="200"></div>
+        <div class="field"><label for="author">Author</label><input id="author" name="author" type="text" value="{{ form.author }}" required maxlength="120"></div>
+        <div class="field"><label for="category">Category</label>
+          <select id="category" name="category" required>
+            <option value="">Choose a category</option>
+            {% for c in categories %}<option value="{{ c }}" {% if form.category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+          </select></div>
+        <div class="row">
+          <div class="field"><label for="year">Year <span class="muted">(optional)</span></label><input id="year" name="year" type="number" min="1000" max="{{ this_year }}" value="{{ form.year }}"></div>
+          <div class="field"><label for="copies">Copies</label><input id="copies" name="copies" type="number" min="1" max="100" value="{{ form.copies or 1 }}" required></div>
+        </div>
+        <div class="field"><label for="isbn">ISBN <span class="muted">(optional)</span></label><input id="isbn" name="isbn" type="text" inputmode="numeric" value="{{ form.isbn }}"></div>
+        <button class="btn btn-block" type="submit">Add book</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}
