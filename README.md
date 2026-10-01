@@ -244,7 +244,10 @@ This project was built with the help of [Claude](https://claude.ai), Anthropic's
 
 ## Author
 
-[@shivam-pandyacoder24](https://github.com/shivam-pandyacoder24)
+**Shivam A Pandya**
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-shivampandya2409-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/shivampandya2409/)
+[![GitHub](https://img.shields.io/badge/GitHub-shivam--pandyacoder24-181717?logo=github&logoColor=white)](https://github.com/shivam-pandyacoder24)
 
 ## License
 
