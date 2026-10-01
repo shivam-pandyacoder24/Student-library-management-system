@@ -1,15 +1,11 @@
-"""Sign up and sign in with username + email, verified by a one-time code sent by email."""
-import hashlib
+"""Sign up and sign in with a password. One account per email address."""
 import hmac
-import json
 import re
-import secrets
 from datetime import timedelta
 
-from flask import (Blueprint, current_app, flash, g, redirect, render_template,
-                   request, session, url_for)
+from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import emailer
 from .db import execute, from_ts, now_ts, query, scalar, to_ts, utcnow
 from .utils import home_for, log_in
 
@@ -18,58 +14,47 @@ bp = Blueprint("auth", __name__)
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{3,30}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 ROLES = ("student", "faculty", "librarian")
+HASH_METHOD = "pbkdf2:sha256"  # available on every Python build
+# Compared against when the account doesn't exist, so a wrong username takes as long as a wrong password.
+_DUMMY_HASH = generate_password_hash("not-a-real-password", method=HASH_METHOD)
 
 
-class OtpError(Exception):
-    pass
+def hash_password(password):
+    return generate_password_hash(password, method=HASH_METHOD)
 
 
-# ---------- OTP helpers ----------
+def password_problems(password, confirm=None):
+    """Return a list of reasons the password isn't acceptable (empty if it's fine)."""
+    min_len = current_app.config["MIN_PASSWORD_LENGTH"]
+    problems = []
+    if len(password) < min_len:
+        problems.append(f"Use a password of at least {min_len} characters.")
+    elif password.isdigit() or password.isalpha():
+        problems.append("Mix letters with numbers or symbols in your password.")
+    if len(password) > 128:
+        problems.append("Passwords can be at most 128 characters.")
+    if confirm is not None and password != confirm:
+        problems.append("The two passwords don't match.")
+    return problems
 
-def _hash_code(email, code):
-    key = current_app.config["SECRET_KEY"].encode()
-    return hmac.new(key, f"{email.lower()}:{code}".encode(), hashlib.sha256).hexdigest()
+
+# ---------- failed sign-in tracking ----------
+
+def _lock_key(user, identifier):
+    return f"user:{user['id']}" if user else f"name:{identifier.lower()}"
 
 
-def _check_send_limits(email):
+def _minutes_locked(key):
     cfg = current_app.config
-    last = query(
-        "SELECT created_at FROM otp_codes WHERE email = ? ORDER BY id DESC LIMIT 1",
-        (email,), one=True,
-    )
-    if last:
-        wait = cfg["OTP_RESEND_SECONDS"] - int((utcnow() - from_ts(last["created_at"])).total_seconds())
-        if wait > 0:
-            raise OtpError(f"A code was just sent. You can request another in {wait} seconds.")
-    hour_ago = to_ts(utcnow() - timedelta(hours=1))
-    sent = scalar("SELECT COUNT(*) FROM otp_codes WHERE email = ? AND created_at >= ?", (email, hour_ago))
-    if sent >= cfg["OTP_MAX_PER_HOUR"]:
-        raise OtpError("Too many codes requested for this email. Try again in an hour.")
-
-
-def issue_otp(email, name, purpose, payload):
-    """Create a fresh code, email it, and remember it in the session."""
-    _check_send_limits(email)
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    expires = to_ts(utcnow() + timedelta(minutes=current_app.config["OTP_TTL_MINUTES"]))
-    execute("UPDATE otp_codes SET used = 1 WHERE email = ? AND used = 0", (email,))
-    cur = execute(
-        "INSERT INTO otp_codes (email, purpose, code_hash, payload, created_at, expires_at)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
-        (email, purpose, _hash_code(email, code), json.dumps(payload), now_ts(), expires),
-    )
-    otp_id = cur.lastrowid
-    try:
-        emailer.send_otp_email(email, name, code, purpose)
-    except emailer.EmailError as exc:
-        execute("DELETE FROM otp_codes WHERE id = ?", (otp_id,))
-        raise OtpError(f"We couldn't send the code to {email}. {exc}") from exc
-
-    session["pending_otp"] = {"id": otp_id, "email": email, "purpose": purpose, "name": name}
-    if emailer.is_demo_mode():
-        session["demo_code"] = code
-    else:
-        session.pop("demo_code", None)
+    since = to_ts(utcnow() - timedelta(minutes=cfg["LOGIN_LOCK_MINUTES"]))
+    failures = scalar("SELECT COUNT(*) FROM login_failures WHERE lock_key = ? AND created_at >= ?", (key, since))
+    if failures < cfg["LOGIN_MAX_FAILURES"]:
+        return 0
+    oldest = scalar(
+        "SELECT created_at FROM login_failures WHERE lock_key = ? AND created_at >= ? ORDER BY created_at"
+        " LIMIT 1 OFFSET ?", (key, since, failures - cfg["LOGIN_MAX_FAILURES"]))
+    unlock = from_ts(oldest) + timedelta(minutes=cfg["LOGIN_LOCK_MINUTES"])
+    return max(1, round((unlock - utcnow()).total_seconds() / 60))
 
 
 def _safe_next(target):
@@ -105,28 +90,32 @@ def index():
 def login():
     if g.user:
         return redirect(home_for(g.user))
-    form = {"username": "", "email": ""}
+    identifier = ""
     if request.method == "POST":
-        form["username"] = request.form.get("username", "").strip()
-        form["email"] = request.form.get("email", "").strip().lower()
-        user = query(
-            "SELECT * FROM users WHERE username = ? AND email = ?",
-            (form["username"], form["email"]), one=True,
-        )
-        if not form["username"] or not form["email"]:
-            flash("Enter your username and email.", "error")
-        elif user is None:
-            flash("No account matches that username and email. Check both, or create an account.", "error")
-        elif user["is_demo"]:
-            flash("Demo accounts don't have a real inbox. Use the demo buttons below instead.", "info")
+        identifier = request.form.get("identifier", "").strip()
+        password = request.form.get("password", "")
+        user = query("SELECT * FROM users WHERE username = ? OR email = ?", (identifier, identifier), one=True)
+        key = _lock_key(user, identifier)
+        locked = _minutes_locked(key) if identifier else 0
+
+        if not identifier or not password:
+            flash("Enter your username or email, and your password.", "error")
+        elif locked:
+            flash(f"Too many wrong attempts. Try again in {locked} minute{'s' if locked != 1 else ''}.", "error")
+        elif user and user["is_demo"] and not user["password_hash"]:
+            flash("That's a demo account. Use the demo buttons below to open it.", "info")
+        elif user and user["password_hash"] and check_password_hash(user["password_hash"], password):
+            execute("DELETE FROM login_failures WHERE lock_key = ?", (key,))
+            execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now_ts(), user["id"]))
+            log_in(user["id"])
+            flash(f"Welcome back, {user['full_name'].split()[0]}.", "success")
+            return redirect(_safe_next(request.args.get("next")) or home_for(user))
         else:
-            try:
-                issue_otp(user["email"], user["full_name"], "login", {"user_id": user["id"]})
-                session["next"] = _safe_next(request.args.get("next"))
-                return redirect(url_for("auth.verify"))
-            except OtpError as exc:
-                flash(str(exc), "error")
-    return render_template("auth/login.html", form=form, shelf=_shelf_books())
+            if not user:
+                check_password_hash(_DUMMY_HASH, password)
+            execute("INSERT INTO login_failures (lock_key, created_at) VALUES (?, ?)", (key, now_ts()))
+            flash("Wrong username, email or password. Check them and try again.", "error")
+    return render_template("auth/login.html", identifier=identifier, shelf=_shelf_books())
 
 
 @bp.route("/signup", methods=["GET", "POST"])
@@ -137,6 +126,7 @@ def signup():
     form["email"] = form["email"].lower()
     form["role"] = form["role"] or "student"
     if request.method == "POST":
+        password = request.form.get("password", "")
         errors = []
         if not 2 <= len(form["full_name"]) <= 60:
             errors.append("Enter your full name (2–60 characters).")
@@ -144,6 +134,7 @@ def signup():
             errors.append("Usernames are 3–30 characters: letters, numbers, dots and underscores.")
         if not EMAIL_RE.match(form["email"]):
             errors.append("Enter a valid email address.")
+        errors += password_problems(password, request.form.get("confirm_password", ""))
         if form["role"] not in ROLES:
             errors.append("Choose student, faculty or librarian.")
         elif form["role"] != "student":
@@ -151,116 +142,25 @@ def signup():
             if not hmac.compare_digest(code, current_app.config["STAFF_ACCESS_CODE"]):
                 errors.append("The staff access code is incorrect. Ask the librarian for it.")
         if not errors:
-            if query("SELECT 1 FROM users WHERE username = ?", (form["username"],), one=True):
-                errors.append("That username is taken. Try another one.")
             if query("SELECT 1 FROM users WHERE email = ?", (form["email"],), one=True):
                 errors.append("An account with that email already exists. Sign in instead.")
+            if query("SELECT 1 FROM users WHERE username = ?", (form["username"],), one=True):
+                errors.append("That username is taken. Try another one.")
         if errors:
             for message in errors:
                 flash(message, "error")
         else:
-            try:
-                issue_otp(form["email"], form["full_name"], "signup", form)
-                return redirect(url_for("auth.verify"))
-            except OtpError as exc:
-                flash(str(exc), "error")
+            cur = execute(
+                "INSERT INTO users (username, email, full_name, role, department, password_hash, created_at, last_login_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (form["username"], form["email"], form["full_name"], form["role"], form["department"] or None,
+                 hash_password(password), now_ts(), now_ts()),
+            )
+            log_in(cur.lastrowid)
+            flash(f"Welcome, {form['full_name'].split()[0]}. Your account is ready.", "success")
+            return redirect(url_for({"student": "student.dashboard", "faculty": "faculty.dashboard",
+                                     "librarian": "librarian.dashboard"}[form["role"]]))
     return render_template("auth/signup.html", form=form, shelf=_shelf_books())
-
-
-@bp.route("/verify", methods=["GET", "POST"])
-def verify():
-    pending = session.get("pending_otp")
-    if not pending:
-        flash("Start by signing in or creating an account.", "info")
-        return redirect(url_for("auth.login"))
-
-    if request.method == "POST":
-        code = re.sub(r"\D", "", request.form.get("code", ""))
-        otp = query("SELECT * FROM otp_codes WHERE id = ?", (pending["id"],), one=True)
-        cfg = current_app.config
-        if otp is None or otp["used"]:
-            flash("This code is no longer valid. Request a new one.", "error")
-        elif from_ts(otp["expires_at"]) < utcnow():
-            flash("This code has expired. Request a new one.", "error")
-        elif otp["attempts"] >= cfg["OTP_MAX_ATTEMPTS"]:
-            flash("Too many wrong attempts. Request a new code.", "error")
-        elif not hmac.compare_digest(otp["code_hash"], _hash_code(otp["email"], code)):
-            execute("UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?", (otp["id"],))
-            left = cfg["OTP_MAX_ATTEMPTS"] - otp["attempts"] - 1
-            flash(f"That code doesn't match. {left} attempt{'s' if left != 1 else ''} left.", "error")
-        else:
-            execute("UPDATE otp_codes SET used = 1 WHERE id = ?", (otp["id"],))
-            payload = json.loads(otp["payload"] or "{}")
-            if otp["purpose"] == "signup":
-                return _finish_signup(payload)
-            return _finish_login(payload["user_id"])
-
-    return render_template(
-        "auth/verify.html",
-        pending=pending,
-        demo_code=session.get("demo_code"),
-        minutes=current_app.config["OTP_TTL_MINUTES"],
-        shelf=_shelf_books(),
-    )
-
-
-def _finish_signup(data):
-    taken = query(
-        "SELECT 1 FROM users WHERE username = ? OR email = ?", (data["username"], data["email"]), one=True
-    )
-    if taken:
-        session.pop("pending_otp", None)
-        flash("That username or email was registered a moment ago. Sign in or pick another.", "error")
-        return redirect(url_for("auth.signup"))
-    cur = execute(
-        "INSERT INTO users (username, email, full_name, role, department, created_at, last_login_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (data["username"], data["email"], data["full_name"], data["role"],
-         data.get("department") or None, now_ts(), now_ts()),
-    )
-    log_in(cur.lastrowid)
-    flash(f"Welcome, {data['full_name'].split()[0]}. Your email is verified and your account is ready.", "success")
-    user = query("SELECT * FROM users WHERE id = ?", (cur.lastrowid,), one=True)
-    return redirect(home_for(user))
-
-
-def _finish_login(user_id):
-    user = query("SELECT * FROM users WHERE id = ?", (user_id,), one=True)
-    if user is None:
-        session.clear()
-        flash("That account no longer exists.", "error")
-        return redirect(url_for("auth.login"))
-    next_url = session.get("next")
-    log_in(user["id"])
-    execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now_ts(), user["id"]))
-    flash(f"Signed in as {user['username']}.", "success")
-    return redirect(next_url or home_for(user))
-
-
-@bp.route("/verify/resend", methods=["POST"])
-def resend():
-    pending = session.get("pending_otp")
-    if not pending:
-        return redirect(url_for("auth.login"))
-    otp = query("SELECT payload FROM otp_codes WHERE id = ?", (pending["id"],), one=True)
-    payload = json.loads(otp["payload"]) if otp and otp["payload"] else None
-    if payload is None:
-        flash("Start again so we can send you a new code.", "info")
-        session.pop("pending_otp", None)
-        return redirect(url_for("auth.signup" if pending["purpose"] == "signup" else "auth.login"))
-    try:
-        issue_otp(pending["email"], pending["name"], pending["purpose"], payload)
-        flash(f"A new code is on its way to {pending['email']}.", "success")
-    except OtpError as exc:
-        flash(str(exc), "error")
-    return redirect(url_for("auth.verify"))
-
-
-@bp.route("/verify/cancel", methods=["POST"])
-def cancel():
-    session.pop("pending_otp", None)
-    session.pop("demo_code", None)
-    return redirect(url_for("auth.login"))
 
 
 @bp.route("/demo/<role>", methods=["POST"])
@@ -268,9 +168,7 @@ def demo_login(role):
     if not current_app.config["ENABLE_DEMO_LOGIN"] or role not in ROLES:
         flash("Demo sign-in is turned off on this server.", "error")
         return redirect(url_for("auth.login"))
-    user = query(
-        "SELECT * FROM users WHERE is_demo = 1 AND role = ? ORDER BY id LIMIT 1", (role,), one=True
-    )
+    user = query("SELECT * FROM users WHERE is_demo = 1 AND role = ? ORDER BY id LIMIT 1", (role,), one=True)
     if user is None:
         flash("There's no demo account for that role yet.", "error")
         return redirect(url_for("auth.login"))

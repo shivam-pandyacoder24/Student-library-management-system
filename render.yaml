@@ -17,8 +17,3 @@ services:
         value: "1"
       - key: LIBRARY_NAME
         value: Campus Library
-      # Render's free plan blocks SMTP, so use Brevo's email API (free, 300 emails/day).
-      - key: BREVO_API_KEY
-        sync: false
-      - key: MAIL_FROM_EMAIL
-        sync: false

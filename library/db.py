@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     full_name     TEXT NOT NULL,
     role          TEXT NOT NULL CHECK (role IN ('student', 'faculty', 'librarian')),
     department    TEXT,
+    password_hash TEXT,
     is_demo       INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL,
     last_login_at TEXT
@@ -40,22 +41,16 @@ CREATE TABLE IF NOT EXISTS loans (
     returned_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS otp_codes (
+CREATE TABLE IF NOT EXISTS login_failures (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    email      TEXT NOT NULL COLLATE NOCASE,
-    purpose    TEXT NOT NULL CHECK (purpose IN ('signup', 'login')),
-    code_hash  TEXT NOT NULL,
-    payload    TEXT,
-    attempts   INTEGER NOT NULL DEFAULT 0,
-    used       INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    lock_key   TEXT NOT NULL,
+    created_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_loans_user   ON loans(user_id);
 CREATE INDEX IF NOT EXISTS idx_loans_book   ON loans(book_id);
 CREATE INDEX IF NOT EXISTS idx_loans_open   ON loans(returned_at);
-CREATE INDEX IF NOT EXISTS idx_otp_email    ON otp_codes(email, created_at);
+CREATE INDEX IF NOT EXISTS idx_failures    ON login_failures(lock_key, created_at);
 CREATE INDEX IF NOT EXISTS idx_books_active ON books(is_active, category);
 """
 
@@ -126,4 +121,8 @@ def execute(sql, args=(), commit=True):
 
 def init_schema(conn):
     conn.executescript(SCHEMA)
+    # Databases made by the earlier email-code version have no password column yet.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "password_hash" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
     conn.commit()

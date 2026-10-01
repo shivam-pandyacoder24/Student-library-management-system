@@ -7,24 +7,29 @@
   <a href="{{ url_for('auth.signup') }}">Create account</a>
 </nav>
 <h2>Sign in</h2>
-<p>Enter your username and email. We'll send a 6-digit code to that inbox to confirm it's you.</p>
+<p>Use your username or email, and your password.</p>
 <form method="post" novalidate>
   {{ ui.csrf() }}
   <div class="field">
-    <label for="username">Username</label>
-    <input id="username" name="username" type="text" autocomplete="username" value="{{ form.username }}" required autofocus>
+    <label for="identifier">Username or email</label>
+    <input id="identifier" name="identifier" type="text" autocomplete="username" autocapitalize="none"
+           value="{{ identifier }}" required autofocus>
   </div>
   <div class="field">
-    <label for="email">Email</label>
-    <input id="email" name="email" type="email" autocomplete="email" inputmode="email" value="{{ form.email }}" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    {{ ui.show_password('password') }}
   </div>
-  <button class="btn btn-block" type="submit">Email me a code</button>
+  <button class="btn btn-block" type="submit">Sign in</button>
 </form>
-<div class="after-form"><span>New here? <a href="{{ url_for('auth.signup') }}">Create an account</a></span></div>
+<div class="after-form">
+  <span>New here? <a href="{{ url_for('auth.signup') }}">Create an account</a></span>
+</div>
+<p class="hint" style="margin-top: 10px">Forgot your password? Ask the librarian to reset it.</p>
 
 {% if cfg.ENABLE_DEMO_LOGIN %}
 <section class="demo" aria-labelledby="demo-h">
-  <p id="demo-h">Just looking around? Open a demo account with sample data, no email needed.</p>
+  <p id="demo-h">Just looking around? Open a demo account with sample data.</p>
   <div class="demo-buttons">
     {% for role, label in [('student', 'Student'), ('faculty', 'Faculty'), ('librarian', 'Librarian')] %}
     <form method="post" action="{{ url_for('auth.demo_login', role=role) }}">

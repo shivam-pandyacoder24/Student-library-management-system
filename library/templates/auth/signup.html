@@ -7,7 +7,7 @@
   <a href="{{ url_for('auth.signup') }}" aria-current="page">Create account</a>
 </nav>
 <h2>Create your account</h2>
-<p>Pick your role, then confirm your email with a 6-digit code.</p>
+<p>One account per email address.</p>
 <form method="post" novalidate>
   {{ ui.csrf() }}
   <div class="field">
@@ -16,13 +16,24 @@
   </div>
   <div class="field">
     <label for="username">Username</label>
-    <input id="username" name="username" type="text" autocomplete="username" value="{{ form.username }}" required
+    <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" value="{{ form.username }}" required
            pattern="[A-Za-z0-9._]{3,30}" aria-describedby="username-hint">
     <span class="hint" id="username-hint">3–30 characters: letters, numbers, dots and underscores.</span>
   </div>
   <div class="field">
     <label for="email">Email</label>
     <input id="email" name="email" type="email" autocomplete="email" inputmode="email" value="{{ form.email }}" required>
+  </div>
+  <div class="field">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required
+           minlength="{{ cfg.MIN_PASSWORD_LENGTH }}" aria-describedby="password-hint">
+    <span class="hint" id="password-hint">At least {{ cfg.MIN_PASSWORD_LENGTH }} characters, mixing letters with numbers or symbols.</span>
+  </div>
+  <div class="field">
+    <label for="confirm_password">Confirm password</label>
+    <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" required>
+    {{ ui.show_password('password', 'confirm_password') }}
   </div>
   <fieldset class="roles">
     <legend>I am a</legend>
@@ -42,7 +53,7 @@
     <label for="department">Department or programme <span class="muted">(optional)</span></label>
     <input id="department" name="department" type="text" value="{{ form.department }}" placeholder="e.g. B.Tech AI">
   </div>
-  <button class="btn btn-block" type="submit">Email me a code</button>
+  <button class="btn btn-block" type="submit">Create account</button>
 </form>
 <div class="after-form"><span>Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></span></div>
 {% endblock %}

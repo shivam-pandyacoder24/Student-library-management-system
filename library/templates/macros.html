@@ -119,3 +119,10 @@
     {{ borrow_button(b, holding) }}
   </article>
 {% endmacro %}
+
+{% macro show_password() %}
+<label class="check show-pass">
+  <input type="checkbox" onchange="{% for id in varargs %}document.getElementById('{{ id }}').type = this.checked ? 'text' : 'password';{% endfor %}">
+  Show password
+</label>
+{% endmacro %}

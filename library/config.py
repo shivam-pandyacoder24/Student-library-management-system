@@ -36,24 +36,10 @@ class Config:
     FINE_PER_DAY = int(_env("FINE_PER_DAY", "5"))  # rupees
     DISPLAY_TIMEZONE = _env("DISPLAY_TIMEZONE", "Asia/Kolkata")
 
-    # OTP
-    OTP_TTL_MINUTES = 10
-    OTP_MAX_ATTEMPTS = 5
-    OTP_RESEND_SECONDS = 45
-    OTP_MAX_PER_HOUR = 6
-
-    # Email. Provider is picked automatically:
-    #   BREVO_API_KEY set           -> Brevo HTTPS API (works on Render's free tier)
-    #   SMTP_HOST + SMTP_USERNAME   -> SMTP, e.g. Gmail with an App Password (works on PythonAnywhere)
-    #   neither                     -> demo mode: the code is shown on screen and printed to the log
-    MAIL_FROM_EMAIL = _env("MAIL_FROM_EMAIL", _env("SMTP_USERNAME", ""))
-    MAIL_FROM_NAME = _env("MAIL_FROM_NAME", LIBRARY_NAME)
-    BREVO_API_KEY = _env("BREVO_API_KEY")
-    SMTP_HOST = _env("SMTP_HOST")
-    SMTP_PORT = int(_env("SMTP_PORT", "587"))
-    SMTP_USERNAME = _env("SMTP_USERNAME")
-    SMTP_PASSWORD = _env("SMTP_PASSWORD").replace(" ", "")  # Gmail shows app passwords with spaces
-    SMTP_USE_SSL = _flag("SMTP_USE_SSL", False)
+    # Passwords and sign-in
+    MIN_PASSWORD_LENGTH = 8
+    LOGIN_MAX_FAILURES = 5     # wrong passwords before the account is paused...
+    LOGIN_LOCK_MINUTES = 15    # ...for this many minutes
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

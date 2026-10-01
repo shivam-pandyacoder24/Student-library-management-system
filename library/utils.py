@@ -24,7 +24,7 @@ def load_current_user():
 
 
 def log_in(user_id):
-    session.clear()  # drops any pending OTP and rotates the session
+    session.clear()  # start a fresh session so an old one can't be reused
     session.permanent = True
     session["user_id"] = user_id
     session["csrf_token"] = secrets.token_urlsafe(32)

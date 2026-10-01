@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import click
 from flask import Flask, g, render_template
 
 from . import db as dbmod
@@ -130,6 +131,29 @@ def _register_cli(app):
         seed_demo(conn, loan_days=app.config["LOAN_DAYS"], force=True)
         conn.close()
         print("Demo data reloaded.")
+
+    @app.cli.command("set-password")
+    @click.argument("username")
+    @click.password_option()
+    def set_password(username, password):
+        """Set a new password for an account (for users who forgot theirs)."""
+        from .auth import hash_password, password_problems
+        conn = dbmod.connect(app.config["DATABASE_PATH"])
+        dbmod.init_schema(conn)
+        user = conn.execute("SELECT id FROM users WHERE username = ? OR email = ?", (username, username)).fetchone()
+        if user is None:
+            conn.close()
+            raise click.ClickException(f"No account with username or email '{username}'.")
+        with app.app_context():
+            problems = password_problems(password)
+        if problems:
+            conn.close()
+            raise click.ClickException(" ".join(problems))
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(password), user["id"]))
+        conn.execute("DELETE FROM login_failures WHERE lock_key = ?", (f"user:{user['id']}",))
+        conn.commit()
+        conn.close()
+        click.echo(f"Password updated for {username}.")
 
     @app.cli.command("init-db")
     def init_db():

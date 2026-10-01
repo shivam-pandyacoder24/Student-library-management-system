@@ -83,7 +83,7 @@ STUDENTS = [
 def seed_demo(conn, loan_days=14, force=False, rng_seed=7):
     """Fill an empty database with demo data. With force=True, wipe everything first."""
     if force:
-        conn.executescript("DELETE FROM loans; DELETE FROM otp_codes; DELETE FROM books; DELETE FROM users;"
+        conn.executescript("DELETE FROM loans; DELETE FROM login_failures; DELETE FROM books; DELETE FROM users;"
                            "DELETE FROM sqlite_sequence;")
     elif conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]:
         return False

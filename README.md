@@ -1,6 +1,6 @@
 # Student Library Management System
 
-A web app for a college library, built with **Python and Flask**. Students, faculty and librarians sign in with their **username and email**, confirm it with a **6-digit code sent to their inbox (OTP)**, and each role gets its own dashboard. The app also **recommends books** from each student's borrowing history and shows **simple reading insights**.
+A web app for a college library, built with **Python and Flask**. Students, faculty and librarians create an account with their **username, email and password** (one account per email), and each role gets its own dashboard. The app also **recommends books** from each student's borrowing history and shows **simple reading insights**.
 
 ![Sign-in page](docs/screenshots/login.png)
 
@@ -12,17 +12,18 @@ A web app for a college library, built with **Python and Flask**. Students, facu
 | **Faculty** | See **which students are reading which types of books**: a student × category grid, a "who reads this category" filter, each student's reading profile, most borrowed books and most active readers. |
 | **Librarian** | **Add new books**, **delete books**, change the number of copies, see overdue loans with fines, everything on loan, recent activity, and stock suggestions (which categories need more copies, which titles are never borrowed). |
 
-### Sign up and sign in with an email code
+### Accounts and sign-in
 
-1. Sign up with full name, username, email and role (faculty and librarian sign-ups also need a **staff access code**, so students can't make themselves librarians).
-2. The app emails a 6-digit code. The account is only created after the code is entered.
-3. Next time, sign in with **username + email** and a fresh code.
+- **Sign up** with full name, username, email, password and role. Each email can only have **one account**, and each username is unique.
+- **Sign in** with your **username or email** plus your password.
+- Passwords need at least 8 characters with a mix of letters and numbers or symbols. They are stored **hashed** (PBKDF2-SHA256), never as plain text.
+- After 5 wrong passwords, the account is paused for 15 minutes to stop guessing.
+- Faculty and librarian sign-ups need a **staff access code**, so students can't make themselves librarians.
+- All forms are protected against CSRF.
 
-Codes expire after 10 minutes, allow 5 attempts, are stored hashed, and are rate-limited (one every 45 seconds, 6 per hour per email). All forms are protected against CSRF.
-
-| Verify your email | Student home |
+| Create an account | Student home |
 |---|---|
-| ![OTP screen](docs/screenshots/otp.png) | ![Student home](docs/screenshots/student-home.png) |
+| ![Sign-up page](docs/screenshots/signup.png) | ![Student home](docs/screenshots/student-home.png) |
 
 | Faculty: who reads what | Librarian overview |
 |---|---|
@@ -57,18 +58,15 @@ You need Python 3.10 or newer.
 ```bash
 git clone https://github.com/shivam-pandyacoder24/Student-library-management-system.git
 cd Student-library-management-system
-python -m venv .venv
-# Windows:   .venv\Scripts\activate
-# Mac/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 python wsgi.py
 ```
 
-Open http://127.0.0.1:5000. The database (`instance/library.db`) is created automatically with 50 books and demo accounts. Use the **Student / Faculty / Librarian** demo buttons on the sign-in page to look around.
+On Windows, use `py` instead of `python` if `python` isn't recognised.
 
-Without email settings the app runs in **demo mode**: the OTP is shown on the verify screen and printed in the terminal. To send real emails, copy `.env.example` to `.env` and fill in the Gmail settings (see below).
+Open http://127.0.0.1:5000 **while that window stays open** (closing it stops the site). The database (`instance/library.db`) is created automatically with 50 books and demo accounts. Use the **Student / Faculty / Librarian** demo buttons on the sign-in page to look around, or create your own account.
 
-Run the tests (32 of them, covering sign-up, OTP, roles, loans, recommendations and both email providers):
+Run the tests (33 of them, covering accounts, passwords, roles, loans and recommendations):
 
 ```bash
 python -m unittest discover -s tests -v
@@ -78,22 +76,27 @@ python -m unittest discover -s tests -v
 
 ### Option 1: PythonAnywhere (recommended: your data is kept)
 
-PythonAnywhere's free plan keeps the SQLite file between restarts and allows sending through Gmail's SMTP server.
-
-1. Create a free account at [pythonanywhere.com](https://www.pythonanywhere.com/). Your site will be `https://YOUR-USERNAME.pythonanywhere.com`.
-2. Open **Consoles → Bash** and run:
+1. Create a free **Beginner** account at [pythonanywhere.com](https://www.pythonanywhere.com/). Your site will be `https://YOUR-USERNAME.pythonanywhere.com`.
+2. Open **Consoles → Bash** and run, one line at a time:
    ```bash
    git clone https://github.com/shivam-pandyacoder24/Student-library-management-system.git
    cd Student-library-management-system
    python3.11 -m venv ~/venv-library
    source ~/venv-library/bin/activate
    pip install -r requirements.txt
-   cp .env.example .env
-   nano .env        # set SECRET_KEY, STAFF_ACCESS_CODE and the Gmail settings, then Ctrl+O, Enter, Ctrl+X
+   python3 -c "import secrets; print(secrets.token_hex(32))"
    ```
-3. Go to **Web → Add a new web app → Manual configuration → Python 3.11**.
-4. On the Web tab, set **Virtualenv** to `/home/YOUR-USERNAME/venv-library`.
-5. Click the **WSGI configuration file** link, delete everything in it, and paste:
+3. Copy the long text the last command printed. Then create your settings file (replace the two values first):
+   ```bash
+   cat > .env <<'EOF'
+   SECRET_KEY=paste-the-long-text-here
+   STAFF_ACCESS_CODE=choose-a-code-for-faculty-and-librarians
+   COOKIE_SECURE=1
+   EOF
+   ```
+4. Go to **Web → Add a new web app → Next → Manual configuration → Python 3.11 → Next**.
+5. Under **Virtualenv**, enter `/home/YOUR-USERNAME/venv-library`.
+6. Click the **WSGI configuration file** link, delete everything in it, paste this (with your username), and **Save**:
    ```python
    import os, sys
    path = "/home/YOUR-USERNAME/Student-library-management-system"
@@ -102,36 +105,29 @@ PythonAnywhere's free plan keeps the SQLite file between restarts and allows sen
    os.chdir(path)
    from wsgi import app as application
    ```
-6. Click **Reload**. Your site is live.
+7. Back on the **Web** tab, turn on **Force HTTPS** and click **Reload**. Your site is live.
 
-To update later: `cd Student-library-management-system && git pull`, then **Reload** on the Web tab.
+**Keep it running:** free sites switch off after a month unless extended, so log in about once a month and click **"Run until 1 month from today"** on the Web tab.
+
+**Update after changes on GitHub:** in a Bash console run `cd Student-library-management-system && git pull`, then click **Reload**.
+
+**If you see "Something went wrong":** open the **Error log** link on the Web tab. The usual causes are a wrong username in the WSGI file, a missing virtualenv path, or forgetting to click Reload.
 
 ### Option 2: Render (one click)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/shivam-pandyacoder24/Student-library-management-system)
 
-Render reads [`render.yaml`](render.yaml), generates a `SECRET_KEY` and `STAFF_ACCESS_CODE`, and asks for `BREVO_API_KEY` and `MAIL_FROM_EMAIL`. Render's free plan **blocks SMTP**, so emails go through Brevo's HTTPS API instead (free, 300 emails a day). Note that Render's free plan doesn't keep files between restarts, so accounts and loans reset when the service restarts (the demo data reloads automatically). Use PythonAnywhere if you need data to persist.
+Render reads [`render.yaml`](render.yaml) and generates `SECRET_KEY` and `STAFF_ACCESS_CODE` for you (find the code under the service's **Environment** tab). Note that Render's free plan doesn't keep files between restarts, so accounts and loans reset whenever the service restarts (the demo data reloads automatically). Use PythonAnywhere if you need data to stay.
 
-## Email setup for OTP codes
+## Forgot password
 
-**Gmail (PythonAnywhere or your own computer)**
+The librarian (or whoever runs the server) can set a new password from a console in the project folder:
 
-1. Turn on 2-Step Verification for your Google account.
-2. Create an **App Password** at https://myaccount.google.com/apppasswords.
-3. In `.env`:
-   ```
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USERNAME=yourname@gmail.com
-   SMTP_PASSWORD=the 16-character app password
-   MAIL_FROM_EMAIL=yourname@gmail.com
-   ```
+```bash
+flask --app wsgi set-password USERNAME-OR-EMAIL
+```
 
-**Brevo (Render)**
-
-1. Sign up at [brevo.com](https://www.brevo.com/) and verify a sender email address.
-2. Create an API key (SMTP & API → API keys).
-3. Set `BREVO_API_KEY` and `MAIL_FROM_EMAIL` (the verified sender) in Render's Environment tab.
+It asks for the new password twice. On PythonAnywhere, run `source ~/venv-library/bin/activate` first.
 
 ## Settings
 
@@ -139,19 +135,16 @@ All settings are environment variables (or lines in `.env`). See [`.env.example`
 
 | Variable | What it does | Default |
 |---|---|---|
-| `SECRET_KEY` | Signs sessions and OTP hashes. **Set a long random value.** | dev value |
+| `SECRET_KEY` | Signs session cookies. **Set a long random value.** | dev value |
 | `STAFF_ACCESS_CODE` | Code needed to sign up as faculty or librarian | `staff123` |
-| `LIBRARY_NAME` | Name shown in the header and emails | Campus Library |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP email (e.g. Gmail) | empty |
-| `BREVO_API_KEY` | Brevo email API key | empty |
-| `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Sender of the OTP emails | empty |
+| `LIBRARY_NAME` | Name shown in the header | Campus Library |
 | `SEED_DEMO_DATA` | Load 50 books, 10 demo accounts and history into an empty database | `1` |
-| `ENABLE_DEMO_LOGIN` | Show the one-click demo buttons. **Set to `0` for real use.** | `1` |
+| `ENABLE_DEMO_LOGIN` | Show the one-click demo buttons. **Set to `0` for real use**, since anyone could open the librarian demo. | `1` |
 | `LOAN_DAYS`, `MAX_ACTIVE_LOANS`, `FINE_PER_DAY` | Library rules | `14`, `3`, `5` |
 | `DATABASE_PATH` | Where the SQLite file lives | `instance/library.db` |
 | `COOKIE_SECURE` | Send cookies only over HTTPS | `0` |
 
-Reload the demo data at any time: `flask --app wsgi reset-demo` (this wipes the database).
+Reload the demo data at any time with `flask --app wsgi reset-demo` (this wipes the database).
 
 ## Project structure
 
@@ -161,8 +154,7 @@ Reload the demo data at any time: `flask --app wsgi reset-demo` (this wipes the 
 │   ├── __init__.py          app factory, template filters, error pages, CLI commands
 │   ├── config.py            settings from environment variables
 │   ├── db.py                SQLite schema and helpers (built-in sqlite3, no ORM)
-│   ├── auth.py              sign up, sign in, OTP verification, demo logins
-│   ├── emailer.py           sends OTP mail via Brevo, SMTP, or demo mode
+│   ├── auth.py              sign up, sign in, password checks, demo logins
 │   ├── services.py          issue/return rules, availability, fines
 │   ├── recommender.py       book recommendations
 │   ├── insights.py          student, faculty and librarian insights
@@ -178,8 +170,8 @@ Reload the demo data at any time: `flask --app wsgi reset-demo` (this wipes the 
 └── .env.example             settings template
 ```
 
-**Database tables:** `users` (username, email, name, role), `books` (title, author, category, copies), `loans` (who borrowed what, when it's due, when it came back), `otp_codes` (hashed codes with expiry and attempt count).
+**Database tables:** `users` (username, email, name, role, password hash), `books` (title, author, category, copies), `loans` (who borrowed what, when it's due, when it came back), `login_failures` (recent wrong-password attempts, for the 15-minute pause).
 
 ## Tech stack
 
-Python 3, Flask, Jinja2, SQLite, plain HTML and CSS (no JavaScript framework), Brevo API or SMTP for email, gunicorn for Render.
+Python 3, Flask, Jinja2, SQLite, Werkzeug password hashing, plain HTML and CSS (no JavaScript framework), gunicorn for Render.
